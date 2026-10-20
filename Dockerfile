@@ -32,8 +32,8 @@ WORKDIR /app
 COPY --chown=app:app . .
 
 # Exports
-ENV SM_COMMAND "docker run punksecurity/dnsreaper --" \
-    PYTHONUNBUFFERED=1 \
+ENV SM_COMMAND="docker run punksecurity/dnsreaper --"
+ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     HOME=/home/app
 USER app
