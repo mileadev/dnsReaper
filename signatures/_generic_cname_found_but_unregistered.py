@@ -1,5 +1,6 @@
 from domain import Domain
 from . import checks
+from .checks import helpers
 
 from .templates.base import Base
 
@@ -7,8 +8,7 @@ from .templates.base import Base
 def potential(domain: Domain, **kwargs) -> bool:
     if domain.CNAME != []:
         for cname in domain.CNAME:
-            if cname.count(".") == 1:
-                # This is a 2 part domain, i.e. foo.bar
+            if helpers.is_registrable_domain(cname):
                 return True
     return False
 

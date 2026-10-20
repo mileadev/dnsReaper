@@ -1,11 +1,11 @@
-dnspython==2.2.1
-requests==2.31.0
+dnspython==2.9.0
+requests==2.34.2
 asyncwhois==1.1.4
 boto3==1.35.19
 cloudflare==2.9.11
 colorama==0.4.5
 azure-mgmt-dns==8.0.0
-azure-identity==1.10.0
-msrestazure==0.6.4
-google-cloud-dns==0.34.1
-aiohttp
+azure-identity==1.26.0
+google-cloud-dns==0.37.2
+aiohttp==3.14.5
+tldextract==5.4.0

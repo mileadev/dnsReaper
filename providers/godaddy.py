@@ -1,14 +1,18 @@
+import logging
+
 import requests
 
-from domain import Domain
+from ._shared import (
+    DomainNotFoundError,
+    check_response as _check_response,
+    convert_records_to_domains,
+    make_request,
+    HTTP_TIMEOUT,
+)
 
 description = "Scan multiple domains by fetching them from GoDaddy"
 
-
-class DomainNotFoundError(Exception):
-    def __init__(self, domain):
-        self.message = "Domain not found: " + domain
-        super().__init__(self.message)
+API_URL = "https://api.godaddy.com/v1/"
 
 
 class GDApi:
@@ -23,73 +27,27 @@ class GDApi:
 
     @staticmethod
     def check_response(response: requests.Response):
-        if response.status_code == 401:
-            raise ValueError("Invalid API key specified.")
-        if response.status_code == 403:
-            raise ValueError(
-                "API key valid but access denied. GoDaddy now block API access unless you have at least 10 domains"
-            )
-        if response.status_code < 200 or response.status_code >= 300:
-            raise ValueError(
-                "Invalid response received from API: " + str(response.json())
-            )
-
-        return response
+        return _check_response(
+            response,
+            "API key valid but access denied. GoDaddy now block API access unless you have at least 10 domains",
+        )
 
     def make_request(self, endpoint):
-        return self.session.prepare_request(
-            requests.Request("GET", "https://api.godaddy.com/v1/" + endpoint)
-        )
+        return make_request(self.session, API_URL + endpoint)
 
     def list_domains(self):
         req = self.make_request("domains")
 
-        return self.check_response(self.session.send(req))
+        return self.check_response(self.session.send(req, timeout=HTTP_TIMEOUT))
 
     def get_records(self, domain):
         req = self.make_request(f"domains/{domain}/records")
-        res = self.session.send(req)
+        res = self.session.send(req, timeout=HTTP_TIMEOUT)
 
         if 404 == res.status_code:
             raise DomainNotFoundError(domain)
 
         return self.check_response(res)
-
-
-def convert_records_to_domains(records, root_domain):
-    buf = {}
-    for record in records:
-        if "@" == record["name"]:
-            continue
-
-        record_name = f"{record['name']}.{root_domain}"
-
-        if record_name not in buf.keys():
-            buf[record_name] = {}
-
-        if record["type"] not in buf[record_name].keys():
-            buf[record_name][record["type"]] = []
-
-        if "data" in record.keys():
-            buf[record_name][record["type"]].append(record["data"])
-
-    def extract_records(desired_type):
-        return [r.rstrip(".") for r in buf[subdomain][desired_type]]
-
-    for subdomain in buf.keys():
-        domain = Domain(subdomain.rstrip("."), fetch_standard_records=False)
-
-        if "A" in buf[subdomain].keys():
-            domain.A = extract_records("A")
-        if "AAAA" in buf[subdomain].keys():
-            domain.AAAA = extract_records("AAAA")
-        if "CNAME" in buf[subdomain].keys():
-            domain.CNAME = [
-                x.replace("@", root_domain) for x in extract_records("CNAME")
-            ]
-        if "NS" in buf[subdomain].keys():
-            domain.NS = extract_records("NS")
-        yield domain
 
 
 def fetch_domains(gd_api_key: str, gd_api_secret: str, gd_domains: str = None, **args):
@@ -107,7 +65,14 @@ def fetch_domains(gd_api_key: str, gd_api_secret: str, gd_domains: str = None, *
         if "" == domain or domain is None:
             continue
 
-        records = api.get_records(domain).json()
-        domains.extend(convert_records_to_domains(records, domain))
+        try:
+            records = api.get_records(domain).json()
+        except DomainNotFoundError:
+            logging.warning(f"Domain not found, skipping: {domain}")
+            continue
+
+        domains.extend(
+            convert_records_to_domains(records, domain, replace_at_in_cname=True)
+        )
 
     return domains

@@ -53,7 +53,9 @@ def convert_records_to_domains(records):
 def get_zones(client):
     hosted_zones = []
     try:
-        hosted_zones = client.list_hosted_zones()["HostedZones"]
+        paginator = client.get_paginator("list_hosted_zones")
+        for page in paginator.paginate():
+            hosted_zones.extend(page["HostedZones"])
     except ClientError as e:
         logging.critical(
             f"Failed to fetch zones from AWS. Ensure you have the 'ListHostedZones' permission. {e}"
@@ -61,12 +63,8 @@ def get_zones(client):
         exit(-1)
 
     logging.debug(f"Got {len(hosted_zones)} zones from aws")
-    if len(hosted_zones) == 0:
-        return []
     public_zones = [zone for zone in hosted_zones if not zone["Config"]["PrivateZone"]]
-    logging.info(f"Got {len(hosted_zones)} public zones from aws")
-    if len(public_zones) == 0:
-        return []
+    logging.info(f"Got {len(public_zones)} public zones from aws")
     return public_zones
 
 
@@ -98,13 +96,11 @@ def fetch_domains(
         caller_id = sts_client.get_caller_identity()
         logging.warning(f"Using IAM identity: {caller_id['Arn']}")
     except NoCredentialsError:
-        logging.critical(
-            """
+        logging.critical("""
 ERROR - Could not locate valid AWS provider credentials. Please provide IAM access keys via the '--aws-access-key-id'
 and '--aws-access-key-secret' command-line options or consult the AWS provider documentation for alternative 
 authentication methods
-"""
-        )
+""")
         exit(-1)
 
     client = boto3.client(
@@ -117,7 +113,7 @@ authentication methods
     for zone in zones:
         try:
             records = get_records(client, zone["Id"].replace("/hostedzone/", ""))
-        except:
+        except Exception:
             logging.warning(f"Could not retrieve records for aws zone '{zone['Name']}'")
             records = []
         logging.debug(f"Got {len(records)} records for aws zone '{zone['Name']}'")

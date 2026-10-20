@@ -1,14 +1,9 @@
 import requests, logging
 
 from domain import Domain
+from ._shared import DomainNotFoundError, HTTP_TIMEOUT
 
 description = "Scan multiple domains by fetching them from Security Trails"
-
-
-class DomainNotFoundError(Exception):
-    def __init__(self, domain):
-        self.message = "Domain not found: " + domain
-        super().__init__(self.message)
 
 
 class STApi:
@@ -31,7 +26,7 @@ class STApi:
             )
 
         if response.status_code < 200 or response.status_code >= 300:
-            raise ValueError("Invalid response received from API: " + response.json())
+            raise ValueError("Invalid response received from API: " + response.text)
 
         return response
 
@@ -42,7 +37,7 @@ class STApi:
 
     def get_subdomains(self, domain):
         req = self.make_request(f"domain/{domain}/subdomains")
-        res = self.session.send(req)
+        res = self.session.send(req, timeout=HTTP_TIMEOUT)
 
         if 404 == res.status_code:
             raise DomainNotFoundError(domain)
@@ -61,7 +56,11 @@ def fetch_domains(st_api_key: str, st_domains: str, **args):
         if "" == domain or domain is None:
             continue
 
-        raw_domains = api.get_subdomains(domain).json()
+        try:
+            raw_domains = api.get_subdomains(domain).json()
+        except DomainNotFoundError:
+            logging.warning(f"Domain not found, skipping: {domain}")
+            continue
 
         logging.warning(f"Testing {raw_domains['subdomain_count']} subdomains")
         domains.extend([Domain(f"{sb}.{domain}") for sb in raw_domains["subdomains"]])

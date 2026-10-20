@@ -146,15 +146,35 @@ terraform.tfstate
 
 pdkey
 
-# exclude state
+# exclude state, local secrets, Terraform sources and scan data
+.terraform/
+.terraform.lock.hcl
+*.tf
+*.tfvars
 terraform.tfstate
-terraform.tfstate.backup
+terraform.tfstate.*
+*.tfstate
+*.tfstate.*
+pdkey
+.env
+.env.*
+*.zip
+/domains.txt
+/out/
+results.*
+results/
 
-#exclude other stuff
+# exclude files that are only needed on the host
 .github
 .vscode
 __pycache__
 .git
 dev
 docs
-#tests
+tests
+README.md
+compose.yaml
+docker-bake.hcl
+Dockerfile
+.dockerignore
+.DS_Store

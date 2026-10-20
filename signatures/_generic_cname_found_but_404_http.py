@@ -1,5 +1,6 @@
 from domain import Domain
 from . import checks
+from .checks import helpers
 import detection_enums
 
 from .templates.base import Base
@@ -8,8 +9,8 @@ from .templates.base import Base
 def potential(domain: Domain, **kwargs) -> bool:
     if domain.CNAME != []:
         for cname in domain.CNAME:
-            if domain.domain.split(".")[-2:] != cname.split(".")[-2:]:
-                # last 2 parts of domain dont match, doesnt belong to same org
+            if not helpers.same_registrable_domain(domain.domain, cname):
+                # does not belong to the same organisation
                 return True
     return False
 

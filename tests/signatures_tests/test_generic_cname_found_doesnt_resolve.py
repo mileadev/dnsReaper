@@ -63,3 +63,17 @@ async def test_check_success_ACTIVE():
     domain.CNAME = [test_cname]
     print(f"Testing cname {test_cname}")
     assert (await _generic_cname_found_doesnt_resolve.test.check(domain)) == True
+
+
+@pytest.mark.asyncio
+async def test_potential_success_with_a_co_uk_cname_of_another_registrable_domain():
+    domain = Domain("example.co.uk", fetch_standard_records=False)
+    domain.CNAME = ["attacker.co.uk"]
+    assert _generic_cname_found_doesnt_resolve.test.potential(domain) == True
+
+
+@pytest.mark.asyncio
+async def test_potential_failure_with_a_co_uk_cname_of_the_same_registrable_domain():
+    domain = Domain("foo.example.co.uk", fetch_standard_records=False)
+    domain.CNAME = ["bar.example.co.uk"]
+    assert _generic_cname_found_doesnt_resolve.test.potential(domain) == False

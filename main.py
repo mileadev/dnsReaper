@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from scan import scan_domain
+from scan import scan_domain, scan_exit_code
 import signatures
 import output
 import detection_enums
@@ -18,6 +18,8 @@ import argparsing
 import colorama
 
 import time
+
+import os
 
 import asyncio
 
@@ -43,7 +45,6 @@ if args.verbose > 1:
     verbosity_level = logging.DEBUG
 
 logging.basicConfig(format="%(message)s", level=verbosity_level)
-logging.StreamHandler(stderr)
 
 if not args.verbose > 2:
     for module in ["boto", "requests"]:
@@ -85,12 +86,21 @@ logging.warning(f"Testing with {len(signatures)} signatures")
 
 findings = []
 
-if "--out" not in argv:
-    # using default out location, need to append our format
-    args.out = f"{args.out}.{args.out_format}"
+args.out = output.resolve_output_path(args.out, args.out_format)
+
+try:
+    scan_timeout = int(os.environ.get("SCAN_TIMEOUT", "3600"))
+except ValueError:
+    logging.warning("Invalid SCAN_TIMEOUT, using 3600 seconds")
+    scan_timeout = 3600
+if scan_timeout < 1:
+    logging.warning("SCAN_TIMEOUT must be at least 1, using 3600 seconds")
+    scan_timeout = 3600
 
 
 async def main():
+    timed_out = False
+
     ###### domain ingestion
     nameservers = (
         dns.resolver.Resolver().nameservers
@@ -105,15 +115,26 @@ async def main():
         logging.error("ERROR: No domains to scan")
         exit(-1)
 
-    with output.Output(args.out_format, args.out) as o:
-        scan = partial(
-            scan_domain,
-            signatures=signatures,
-            output_handler=o,
-            findings=findings,
-        )
+    try:
+        with output.Output(args.out_format, args.out) as o:
+            scan = partial(
+                scan_domain,
+                signatures=signatures,
+                output_handler=o,
+                findings=findings,
+            )
 
-        await asyncio.gather(*[asyncio.create_task(scan(domain)) for domain in domains])
+            await asyncio.wait_for(
+                asyncio.gather(
+                    *[asyncio.create_task(scan(domain)) for domain in domains]
+                ),
+                timeout=scan_timeout,
+            )
+    except asyncio.TimeoutError:
+        timed_out = True
+        logging.error(f"ERROR: Scan timed out after {scan_timeout} seconds")
+    finally:
+        await Domain.close_session()
 
     ###### exit
     logging.warning(f"\n\nWe found {len(findings)} takeovers ☠️")
@@ -127,9 +148,9 @@ async def main():
         f"\n⏱️  We completed in {round(time.time() - start_time, 2)} seconds"
     )
     logging.warning(f"...Thats all folks!")
-    if args.pipeline:
-        logging.debug(f"Pipeline flag set - Exit code: {len(findings)}")
-        exit(len(findings))
+    exit_code = scan_exit_code(findings, timed_out=timed_out, pipeline=args.pipeline)
+    logging.debug(f"Exit code: {exit_code}")
+    exit(exit_code)
 
 
 asyncio.run(main())

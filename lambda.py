@@ -72,7 +72,13 @@ async def scan(domain: str):
         domains = domain.split(",")
         results = await process_domains(domains)
         guid = str(uuid.uuid4())
-        table.put_item(Item={"guid": guid, "results": results})
+        table.put_item(
+            Item={
+                "guid": guid,
+                "results": results,
+                "expires": int(time.time()) + 24 * 60 * 60,
+            }
+        )
         return {"results": guid}
     except Exception as e:
         logging.error(e)
@@ -93,9 +99,27 @@ async def result(id: str):
 
 ###### scanning
 
+
+def _env_positive_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        logging.warning(f"Invalid {name}={raw!r}, using default {default}")
+        return default
+    if value < 1:
+        logging.warning(
+            f"Invalid {name}={value} (must be >= 1), using default {default}"
+        )
+        return default
+    return value
+
+
 PD_API_KEY = os.environ.get("PD_API_KEY", None)
 DYNAMO_TABLE = os.environ.get("DYNAMO_TABLE", None)
-SCAN_DOMAIN_LIMIT = os.environ.get("SCAN_DOMAIN_LIMIT", 2000)
+SCAN_DOMAIN_LIMIT = _env_positive_int("SCAN_DOMAIN_LIMIT", 2000)
 
 
 async def process_domains(domains: list[str]):
@@ -111,7 +135,7 @@ async def process_domains(domains: list[str]):
         parallelism=4000,
     )
     findings = []
-    domain_objs = [Domain(domain) for domain in domains]
+    domain_objs = [Domain(domain) for domain in domains[:SCAN_DOMAIN_LIMIT]]
     if len(domains) == 1:
         # Project Discovery!
 
@@ -138,34 +162,45 @@ async def process_domains(domains: list[str]):
 
     random.shuffle(domain_objs)
     domain_objs = domain_objs[:SCAN_DOMAIN_LIMIT]
-    logging.warning(domain_objs)
+    logging.warning(f"Scanning {len(domain_objs)} domains")
     start_time = time.time()
-    with output.Output("json", stdout) as o:
-        scan = partial(
-            scan_domain,
-            signatures=signatures,
-            output_handler=o,
-            findings=findings,
-        )
-        await asyncio.wait(
-            [asyncio.create_task(scan(domain)) for domain in domain_objs],
-            timeout=20,
-            return_when=asyncio.ALL_COMPLETED,
-        )
+    timed_out = False
+    try:
+        with output.Output("json", stdout) as o:
+            scan = partial(
+                scan_domain,
+                signatures=signatures,
+                output_handler=o,
+                findings=findings,
+            )
+            scan_results = await asyncio.wait_for(
+                asyncio.gather(
+                    *[asyncio.create_task(scan(domain)) for domain in domain_objs],
+                    return_exceptions=True,
+                ),
+                timeout=20,
+            )
+            for result in scan_results:
+                if isinstance(result, Exception):
+                    logging.error(f"Scan task failed: {result}")
+    except asyncio.TimeoutError:
+        timed_out = True
+        logging.warning("Scan timed out after 20 seconds")
+    finally:
+        await Domain.close_session()
     return {
-        "domains": domains,
+        "count_input_domains": len(domains),
         "findings": [f.__dict__ for f in findings],
         "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "count_scanned_domains": len(domain_objs),
         "count_signatures": len(signatures),
         "execution_time": str(round(time.time() - start_time, 2)),
+        "timed_out": timed_out,
     }
 
 
-def handler(event, context):
-    asgi_handler = Mangum(app)
-    response = asgi_handler(
-        event, context
-    )  # Call the instance with the event arguments
+asgi_handler = Mangum(app)
 
-    return response
+
+def handler(event, context):
+    return asgi_handler(event, context)

@@ -47,7 +47,7 @@ def get_zones(client):
     except Exception as e:
         logging.critical(
             f"""Failed to fetch zones from Google Cloud. Could not discover credentials.
-Ensure that the environment variable `GOOGLE_APPLICATION_CREDENTIALS` is set to the JSON credential file's location, 
+Ensure that the environment variable `GOOGLE_APPLICATION_CREDENTIALS` is set to the JSON credential file's location,
 or that the JSON file is in the default location. Also, ensure that the correct project id has been passed.
 {e}"""
         )
@@ -73,7 +73,7 @@ def fetch_domains(project_id, **args):
     for zone in zones:
         try:
             records = get_records(zone)
-        except:
+        except Exception:
             logging.warning(
                 f"Could not retrieve records for Google Cloud zone '{zone.dns_name}'"
             )

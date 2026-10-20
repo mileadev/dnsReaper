@@ -28,3 +28,23 @@ def test_substrings_in_strings_no_strings():
 
 def test_substrings_in_strings_nothing():
     assert helpers.substrings_in_strings("", "") == ""
+
+
+## registrable_domain / same_registrable_domain / is_registrable_domain
+def test_same_registrable_domain_for_different_co_uk_domains():
+    assert helpers.same_registrable_domain("example.co.uk", "attacker.co.uk") == False
+
+
+def test_same_registrable_domain_for_subdomains_of_the_same_co_uk_domain():
+    assert (
+        helpers.same_registrable_domain("foo.example.co.uk", "bar.example.co.uk")
+        == True
+    )
+
+
+def test_is_registrable_domain_for_a_co_uk_domain():
+    assert helpers.is_registrable_domain("foo.co.uk") == True
+
+
+def test_is_registrable_domain_for_a_subdomain_of_a_co_uk_domain():
+    assert helpers.is_registrable_domain("sub.foo.co.uk") == False

@@ -1,14 +1,13 @@
-import requests, logging, json
+import requests, logging
 
 from domain import Domain
+from ._shared import (
+    DomainNotFoundError,
+    HTTP_TIMEOUT,
+    check_response as _check_response,
+)
 
 description = "Scan multiple domains by fetching them from ProjectDiscovery"
-
-
-class DomainNotFoundError(Exception):
-    def __init__(self, domain):
-        self.message = "Domain not found: " + domain
-        super().__init__(self.message)
 
 
 class PDApi:
@@ -20,13 +19,7 @@ class PDApi:
 
     @staticmethod
     def check_response(response: requests.Response):
-        if response.status_code == 401:
-            raise ValueError("Invalid API key specified.")
-
-        if response.status_code < 200 or response.status_code >= 300:
-            raise ValueError("Invalid response received from API: " + response.json())
-
-        return response
+        return _check_response(response)
 
     def make_request(self, endpoint):
         return self.session.prepare_request(
@@ -36,12 +29,12 @@ class PDApi:
     def list_domains(self):
         req = self.make_request("domains")
 
-        return self.check_response(self.session.send(req))
+        return self.check_response(self.session.send(req, timeout=HTTP_TIMEOUT))
 
     def get_subdomains(self, domain):
         domain = domain.lower()
         req = self.make_request(f"{domain}/subdomains")
-        res = self.session.send(req)
+        res = self.session.send(req, timeout=HTTP_TIMEOUT)
 
         if 404 == res.status_code:
             raise DomainNotFoundError(domain)
@@ -60,7 +53,12 @@ def fetch_domains(pd_api_key: str, pd_domains: str, **args):
         if "" == domain or domain is None:
             continue
 
-        raw_domains = api.get_subdomains(domain).json()
+        try:
+            raw_domains = api.get_subdomains(domain).json()
+        except DomainNotFoundError:
+            logging.warning(f"Domain not found, skipping: {domain}")
+            continue
+
         logging.warning(f"Testing {len(raw_domains['subdomains'])} subdomains")
         domains.extend(
             [

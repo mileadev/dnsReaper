@@ -1,0 +1,28 @@
+services:
+  dnsreaper:
+    build: .
+    image: dnsreaper:local
+    init: true
+    read_only: true
+    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    environment:
+      HOME: /tmp
+      SCAN_TIMEOUT: "${SCAN_TIMEOUT:-3600}"
+    volumes:
+      - ./domains.txt:/work/domains.txt:ro
+      - ./out:/work/out
+    command:
+      - file
+      - --filename
+      - /work/domains.txt
+      - --out
+      - /work/out/results.json
+      - --out-format
+      - json
+      - --pipeline

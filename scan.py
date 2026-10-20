@@ -3,6 +3,16 @@ from finding import Finding
 import logging
 
 
+def pipeline_exit_code(findings):
+    return 1 if findings else 0
+
+
+def scan_exit_code(findings, timed_out=False, pipeline=False):
+    if timed_out:
+        return 3
+    return pipeline_exit_code(findings) if pipeline else 0
+
+
 async def scan_domain(domain, signatures, findings, output_handler):
     if domain.should_fetch_std_records:
         await domain.fetch_std_records()

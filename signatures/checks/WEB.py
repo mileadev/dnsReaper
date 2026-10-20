@@ -1,7 +1,6 @@
 from domain import Domain
 from math import floor
 import logging
-import sys
 
 
 async def string_in_body(
@@ -12,8 +11,6 @@ async def string_in_body(
         logging.info(f"Message observed in response for '{domain}'")
         return True
     logging.debug(f"Message not found in response for '{domain}'")
-    if "pytest" in sys.modules:
-        logging.warning(f"{body=}")
     return False
 
 

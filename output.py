@@ -4,6 +4,12 @@ import os
 from sys import stdout
 
 
+def resolve_output_path(path, out_format):
+    if path is not None:
+        return path
+    return f"results.{out_format}"
+
+
 class Output:
     supported_formats = ["csv", "json"]
 
@@ -15,19 +21,19 @@ class Output:
             self.path = stdout
         self.format = format
         self.writer = None
+        self.first = True
 
     def __enter__(self):
         if self.path == stdout:
             self.fd = stdout
-            return self
-        if self.format == "csv":
+        else:
             self.fd = open(self.path, "w", 1, encoding="utf-8", newline="")
         if self.format == "json":
-            self.fd = open(self.path, "w", 1, encoding="utf-8", newline="")
+            self.fd.write("[")
         return self
 
     def __exit__(self, *args, **kwargs):
-        if self.format == "json" and self.writer:
+        if self.format == "json":
             self.fd.write(f"{os.linesep}]")
         if self.path == stdout:
             return
@@ -52,11 +58,8 @@ class Output:
         self.writer.writerow(row)
 
     def write_json(self, finding):
-        sep = ","
-        if self.writer == None:
-            self.fd.write("[")
-            self.writer = True
-            sep = ""  # no seperator for the first run
+        sep = "" if self.first else ","
+        self.first = False
         json_payload = json.dumps(finding.__dict__)
         self.fd.write(f"{sep}{os.linesep}{json_payload}")
         self.fd.flush()

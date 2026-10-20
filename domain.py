@@ -2,8 +2,6 @@ import ipaddress
 from collections import namedtuple
 from typing import Optional
 
-import dns.asyncresolver
-
 import logging
 import collections
 
@@ -17,12 +15,21 @@ import ssl
 from resolver import Resolver
 
 
+class _SharedSession:
+    """Context manager that does not close the shared ClientSession on exit."""
+
+    def __init__(self, session):
+        self._session = session
+
+    async def __aenter__(self):
+        return self._session
+
+    async def __aexit__(self, *exc_info):
+        return False
+
+
 class Domain:
     resolver = Resolver()
-
-    @property
-    async def SOA(self):
-        return await self.query("SOA")
 
     @property
     async def NX_DOMAIN(self):
@@ -32,7 +39,7 @@ class Domain:
         try:
             resp = await self.resolver.resolve(self.domain, type)
             return resp[type]
-        except:
+        except Exception:
             return []
 
     async def fetch_std_records(self):
@@ -63,18 +70,18 @@ class Domain:
             try:
                 d = Domain(self.domain)
                 await d.set_resolver_nameserver(ns)
+                await d.fetch_std_records()
                 self.A += d.A
                 self.AAAA += d.AAAA
-            except:
+                self.CNAME += d.CNAME
+            except Exception:
                 logging.debug(
                     f"We could not resolve the provided NS record '{ns}' to an ip"
                 )
 
     async def set_resolver_nameserver(self, ns: Optional[str] = None):
         if ns is None:
-            self.resolver = dns.asyncresolver
-            self.resolver.timeout = 1
-
+            self.resolver = Domain.resolver
             return
 
         if type(ns) != str:
@@ -82,26 +89,22 @@ class Domain:
 
             raise RuntimeError(f"Invalid NS type - expected str got {type(ns)}")
 
-        self.resolver = dns.asyncresolver.Resolver()
-        self.resolver.timeout = 1
-
         try:
             ipaddress.ip_address(ns)
-            self.resolver.nameservers = [ns]
-            return
+            nameservers = [ns]
         except ValueError:
             # if ns isn't a valid IP address, attempt to resolve it
             try:
-                nameservers = list(
-                    map(
-                        lambda rr: rr.address,
-                        (await self.resolver.resolve(ns.rstrip("."))).rrset,
-                    )
+                bootstrap = (
+                    Domain.resolver
+                    if isinstance(Domain.resolver, Resolver)
+                    else Resolver()
                 )
-                self.resolver.nameservers = nameservers
-            except:
-                # TODO: document why this gets set to an empty list
-                self.resolver.nameservers = []
+                nameservers = (await bootstrap.resolve(ns.rstrip("."), "A"))["A"]
+            except Exception:
+                nameservers = []
+
+        self.resolver = Resolver(nameservers=nameservers, parallelism=1)
 
     def set_base_domain(self):
         split_domain = self.domain.split(".", 1)
@@ -118,10 +121,22 @@ class Domain:
         self.CNAME = []
         self.set_base_domain()
         self.should_fetch_std_records = fetch_standard_records
-        self.base_domain = None
 
-    def get_session(self):
-        return aiohttp.ClientSession()
+    _session = None
+
+    @classmethod
+    def get_session(cls):
+        if cls._session is None or cls._session.closed:
+            cls._session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=5, sock_connect=3)
+            )
+        return _SharedSession(cls._session)
+
+    @classmethod
+    async def close_session(cls):
+        if cls._session is not None:
+            await cls._session.close()
+            cls._session = None
 
     async def fetch_web(self, uri="", https=True):
         protocol = "https" if https else "http"
@@ -137,9 +152,23 @@ class Domain:
         }
         try:
             async with self.get_session() as session:
-                resp = await session.get(url, ssl=ssl_context, headers=headers)
-                web_status = resp.status
-                web_body = await resp.text()
+                async with session.get(url, ssl=ssl_context, headers=headers) as resp:
+                    web_status = resp.status
+                    body_parts = []
+                    remaining = 1024 * 1024
+                    while remaining:
+                        chunk = await resp.content.read(remaining)
+                        if not chunk:
+                            break
+                        body_parts.append(chunk)
+                        remaining -= len(chunk)
+                    body = b"".join(body_parts)
+                    try:
+                        web_body = body.decode(
+                            resp.charset or "utf-8", errors="replace"
+                        )
+                    except LookupError:
+                        web_body = body.decode("utf-8", errors="replace")
         except Exception as exc:
             logging.debug(f"Web request to '{url}' failed: {exc}")
             web_status = 0

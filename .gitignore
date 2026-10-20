@@ -6,12 +6,25 @@ __pycache__/
 # Exclude Output
 results.csv
 
-# exclude pdkey
+# exclude pdkey and local environment files
 pdkey
+.env
+.env.*
 
-# exclude state
+# exclude scan output
+results.*
+results/
+
+# exclude state and build artifacts
+.terraform/
 terraform.tfstate
-terraform.tfstate.backup
+terraform.tfstate.*
+*.tfstate
+*.tfstate.*
+*.zip
+
+# OS files
+.DS_Store
 
 # C extensions
 *.so
@@ -140,3 +153,7 @@ dmypy.json
 
 # Pycharm
 .idea
+
+# local scan input and compose output
+/domains.txt
+/out/

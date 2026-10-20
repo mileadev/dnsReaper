@@ -1,9 +1,9 @@
 from domain import Domain
 from . import checks
+from .checks import helpers
 import detection_enums
 
 from .templates.base import Base
-
 
 filtered_cname_substrings = [
     "elb.amazonaws.com",
@@ -29,8 +29,8 @@ def potential(domain: Domain, **kwargs) -> bool:
             if domain.domain in cname:
                 # the entire domain is in the cname so its probably not customer provided input
                 continue
-            if domain.domain.split(".")[-2:] != cname.split(".")[-2:]:
-                # last 2 parts of domain dont match, doesnt belong to same org
+            if not helpers.same_registrable_domain(domain.domain, cname):
+                # does not belong to the same organisation
                 return True
     return False
 

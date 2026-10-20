@@ -8,12 +8,11 @@ import inspect
 
 runtime = environ.get("SM_COMMAND", f"{sys.argv[0]}")
 
-banner = """\
-          ____              __   _____                      _ __       
+banner = r"""          ____              __   _____                      _ __
          / __ \__  ______  / /__/ ___/___  _______  _______(_) /___  __
         / /_/ / / / / __ \/ //_/\__ \/ _ \/ ___/ / / / ___/ / __/ / / /
-       / ____/ /_/ / / / / ,<  ___/ /  __/ /__/ /_/ / /  / / /_/ /_/ / 
-      /_/    \__,_/_/ /_/_/|_|/____/\___/\___/\__,_/_/  /_/\__/\__, /  
+       / ____/ /_/ / / / / ,<  ___/ /  __/ /__/ /_/ / /  / / /_/ /_/ /
+      /_/    \__,_/_/ /_/_/|_|/____/\___/\___/\__,_/_/  /_/\__/\__, /
                                              PRESENTS         /____/
                               DNS Reaper ☠️
 
@@ -22,15 +21,14 @@ banner = """\
 
 banner_with_colour = (
     colorama.Fore.GREEN
-    + """\
-          ____              __   _____                      _ __       
+    + r"""          ____              __   _____                      _ __
          / __ \__  ______  / /__/ ___/___  _______  _______(_) /___  __
         / /_/ / / / / __ \/ //_/\__ \/ _ \/ ___/ / / / ___/ / __/ / / /
-       / ____/ /_/ / / / / ,<  ___/ /  __/ /__/ /_/ / /  / / /_/ /_/ / 
-      /_/    \__,_/_/ /_/_/|_|/____/\___/\___/\__,_/_/  /_/\__/\__, /  
+       / ____/ /_/ / / / / ,<  ___/ /  __/ /__/ /_/ / /  / / /_/ /_/ /
+      /_/    \__,_/_/ /_/_/|_|/____/\___/\___/\__,_/_/  /_/\__/\__, /
                                              PRESENTS         /____/"""
     + colorama.Fore.RED
-    + """  
+    + """
                               DNS Reaper ☠️"""
     + colorama.Fore.CYAN
     + """
@@ -48,12 +46,19 @@ class CustomParser(argparse.ArgumentParser):
         sys.exit(2)
 
 
+def positive_int(value):
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError(f"must be >= 1, got {value}")
+    return number
+
+
 parser = CustomParser(
     usage=f"""
-{runtime} provider [options] 
+{runtime} provider [options]
 
 output:
-  findings output to screen and (by default) results.csv 
+  findings output to screen and (by default) results.csv
 
 help:
 {runtime} --help
@@ -103,8 +108,8 @@ parser.add_argument(
 parser.add_argument(
     "--out",
     type=str,
-    default="results",
-    help="Output file (default: %(default)s) - use 'stdout' to stream out",
+    default=None,
+    help="Output file (default: results.<format>) - use 'stdout' to stream out",
 )
 
 parser.add_argument(
@@ -124,7 +129,7 @@ parser.add_argument(
 
 parser.add_argument(
     "--parallelism",
-    type=int,
+    type=positive_int,
     default=30,
     help="Number of domains to test in parallel - too high and you may see odd DNS results (default: %(default)s)",
 )

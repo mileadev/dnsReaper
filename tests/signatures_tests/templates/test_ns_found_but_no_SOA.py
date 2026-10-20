@@ -33,7 +33,7 @@ signatures = [getattr(signatures, signature) for signature in signatures.__all__
 async def test_check_success_ACTIVE(signature):
     try:
         ns = signature.test.sample_ns
-    except:
+    except Exception:
         ns = signature.test.ns
     ns = ns if type(ns) == list else [ns]
     domain = Domain(f"mock.local", fetch_standard_records=False)
