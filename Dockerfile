@@ -3,7 +3,7 @@ RUN apk add --no-cache gcc libffi musl-dev libffi-dev
 
 # Create app directory
 RUN python -m venv /opt/venv
-ENV PATH "/opt/venv/bin:$PATH"
+ENV PATH="/opt/venv/bin:$PATH"
 COPY requirements.txt .
 RUN pip install --no-cache-dir --disable-pip-version-check -r requirements.txt
 
@@ -21,7 +21,7 @@ RUN yum install -y zip && yum clean all && zip -r9 /packaged_app.zip .
 # Main application target
 FROM python:3.11-alpine
 COPY --from=builder /opt/venv /opt/venv
-ENV PATH "/opt/venv/bin:$PATH"
+ENV PATH="/opt/venv/bin:$PATH"
 
 RUN addgroup -S app \
     && adduser -S -G app -h /home/app app \
